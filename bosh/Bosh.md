@@ -8,6 +8,8 @@ Target at cloud software
 - deployment
 - lifecycle management
 
+
+
 ## What problem does bosh solve
 
 Do Versioning, packaging, and deploying software reproducibly as a whole. 
@@ -54,6 +56,8 @@ Provide a method to maintaining consistency between multiple environments.
 
   BOSH tool chain integrates well with current best practices of software engineering (including Continuous Delivery) by providing ways to easily create software releases in an automated way and to update complex deployed systems with simple commands
 
+  ​
+
 ## Bosh Concepts
 
 ### Stemcell
@@ -93,4 +97,41 @@ By introducing the concept of a release, the following concerns are addressed:
 
 A deployment is a collection of VMs, built from a [stemcell](http://bosh.io/docs/stemcell.html), that has been populated with specific [releases](http://bosh.io/docs/release.html) and disks that keep persistent data. These resources are created in the IaaS based on a deployment manifest and managed by the [Director](http://bosh.io/docs/terminology.html#director), a centralized management server.
 
-即运行` bosh deploy`后创建出的集群。用户可通过manifest来管理集群，该manifest 是 IaaS independent的，故修改manifest的工作量非常小。（针对各IaaS平台的具体信息存放于`cloud-config`中
+即运行` bosh deploy`后创建出的集群。用户可通过manifest来管理集群，该manifest 是 IaaS independent的，故修改manifest的工作量非常小。（针对各IaaS平台的具体信息存放于`cloud-config`中）
+
+
+
+##  Bosh architecture
+
+[Architecture Doc](http://bosh.io/docs/bosh-components.html)
+
+简单总结一下各Component:
+
+- CLI: 命令行管理工具
+
+- Director: 位于用户和底层组件之间。对上负责接收用户命令，对下负责协调管理各组件。这种用户—中心管理者—底层组件的三层架构被广泛应用于各软件，可谓屡试不爽。Director与下列部分（包括但不限于）有交互
+
+  - Task queue: 用来存储用户发送的或者定时触发的任务，处于director和worker之间。该队列存储于数据库中
+
+  - Workers(Director workers): 从task queue中拿取任务并执行
+
+  - CPI (Cloud Provider Interface):   an API that the Director uses to interact with an IaaS to create and manage stemcells, VMs, and disks. A CPI abstracts infrastructure differences from the rest of BOSH.
+
+    **Question**: 所以Azure的CPI与AWS的CPI拥有相同的function signature?
+
+- Message Bus (NATS): 一个开源的 messaging system. 在Bosh中使用了它的publish-subscribe通信方式。用于director向VM发送要执行的指令，以及VM与health monitor交流VM的运行状况（该运行状况由VM里的bosh agent产生）。
+
+- Registry: 即注册表。当director创建或者更新 VM 的时候，将配置信息存储于注册表中用于VM的引导阶段。实际流程应为: Director->CPI->Registry->VM.
+
+- Health Monitor: 通过来自 Bosh agent 的 *status and lifecycle events* 来诊断VM的健康状况。当其认为某VM有问题时，将发送alert或者触发 Resurrector.
+
+- Resurrector: 重新创建被 Health Monitor 标记为故障的VM。与CLI使用相同的 Director API（这句话的意义是什么？ 是想说 Resurrector 创建VM的方式与 `bosh createVM`的方式相同？）
+
+- DNS Server: BOSH uses PowerDNS to provide DNS resolution between the VMs in a deployment.
+
+- Components used to store Director's persistent data:
+
+  - Database: Director 使用 Postgres 来存储 *information about the desired state of a deployment*. 包括 stemcell, release, deployment 的信息
+  - Blobstore: 存储 release 与编译好的 release. 使用者通过 CLI 上传 release, Director 将其存储到 Blobstore 中。 当部署该 release 时， BOSH 将编排（？）该 release 的编译包并将其存储到 Blobstore 中
+
+- Agent: 预装于每个 VM 的 stemcell 中。Agent 接受来自Director 的指令 (through NATS), 并在 VM 中执行。
