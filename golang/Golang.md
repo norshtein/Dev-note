@@ -353,3 +353,5 @@
 
   用capture reference也非常容易解释。
 
+- 英文版 P238: 这里如果把`wg.Wait()` 放在main goroutine里，之所以会出错，是因为size这个channel是无缓存的，所以会造成死锁。如果size的缓存够大，则可以放在main goroutine里。
+
